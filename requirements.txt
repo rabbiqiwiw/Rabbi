@@ -1,6 +1,4 @@
-pytelegrambotapi
+pyTelegramBotAPI>=4.14.0
 requests
-phonenumbers
-beautifulsoup4
-openpyxl
-xlrd
+segno
+neonize

@@ -1,14 +1,5 @@
 """
 Telegram OTP Sender Bot — single file version.
-
-Setup:
-  pip install pyrogram tgcrypto python-telegram-bot
-
-Env vars:
-  TELEGRAM_BOT_TOKEN   — BotFather token
-  TELEGRAM_API_ID      — my.telegram.org API ID
-  TELEGRAM_API_HASH    — my.telegram.org API hash
-  TELEGRAM_ADMIN_ID    — your Telegram user ID (only this user can control the bot)
 """
 
 import asyncio
@@ -100,6 +91,9 @@ def parse_phone_list(text: str) -> list:
     phones, seen = [], set()
     for raw in text.strip().splitlines():
         cleaned = re.sub(r"[\s\-\(\)\.]+", "", raw.strip())
+        # Auto-add + if missing
+        if re.match(r"^\d{7,15}$", cleaned):
+            cleaned = "+" + cleaned
         if re.match(r"^\+\d{7,15}$", cleaned) and cleaned not in seen:
             phones.append(cleaned)
             seen.add(cleaned)
@@ -151,7 +145,7 @@ class ProcessStats:
 
 API_ID   = 32249278
 API_HASH = "6db59964aa54223b2f6f9b2ef8d700a6"
-RECONNECT_EVERY = 20   # reconnect after every N numbers
+RECONNECT_EVERY = 5   # reconnect after every N numbers
 
 
 class TelegramOTPSender:
@@ -266,7 +260,7 @@ class TelegramOTPSender:
 # Telegram Bot (python-telegram-bot)
 # ─────────────────────────────────────────────────────────────────────
 
-BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8745483166:AAGeGcYwLNYwtCF1x37HAZYweO_ZamEhYco")
 ADMIN_ID  = 8523774444
 
 KEYBOARD = ReplyKeyboardMarkup(
@@ -405,11 +399,10 @@ async def _live_counter(
     last_text = ""
     while tester.status == ProcessStatus.RUNNING:
         s = tester.stats
-        sent = s.success + s.failed
         new_text = (
-            f"📋 *{total} টা নম্বর queued*\n\n"
-            f"🔄 প্রতি *{RECONNECT_EVERY}* টার পরে auto-reconnect\n\n"
-            f"📨 Sent: *{sent}/{total}*  ✅{s.success}  ❌{s.failed}"
+            f"📋 {total} টা নম্বর queued\n\n"
+            f"🔄 প্রতি {RECONNECT_EVERY} টার পরে auto-reconnect\n\n"
+            f"📨 Sent: {s.success}/{total}  ✅{s.success}  ❌{s.failed}"
         )
         if new_text != last_text:
             last_text = new_text
@@ -418,14 +411,13 @@ async def _live_counter(
                     chat_id=chat_id,
                     message_id=msg_id,
                     text=new_text,
-                    parse_mode=ParseMode.MARKDOWN,
                 )
-            except Exception:
-                pass
-        await asyncio.sleep(0.5)
+            except Exception as e:
+                _pylog.warning(f"Live edit error: {e}")
+        await asyncio.sleep(0.2)
 
     # Final update after done/stopped
-    await asyncio.sleep(0.5)   # let stats settle
+    await asyncio.sleep(0.3)   # let stats settle
     s = tester.stats
     sent = s.success + s.failed
     try:
@@ -433,16 +425,15 @@ async def _live_counter(
             chat_id=chat_id,
             message_id=msg_id,
             text=(
-                f"✅ *সম্পন্ন!*\n\n"
-                f"📨 Sent:   *{sent}/{total}*\n"
-                f"✅ Success: `{s.success}`\n"
-                f"❌ Failed:  `{s.failed}`\n"
-                f"⏱ Time:    `{format_duration(s.elapsed)}`"
+                f"✅ সম্পন্ন!\n\n"
+                f"📨 Sent:    {sent}/{total}\n"
+                f"✅ Success: {s.success}\n"
+                f"❌ Failed:  {s.failed}\n"
+                f"⏱ Time:    {format_duration(s.elapsed)}"
             ),
-            parse_mode=ParseMode.MARKDOWN,
         )
-    except Exception:
-        pass
+    except Exception as e:
+        _pylog.warning(f"Final edit error: {e}")
 
 
 async def _notify_when_done(chat_id: int, total: int, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -471,13 +462,8 @@ async def _notify_when_done(chat_id: int, total: int, ctx: ContextTypes.DEFAULT_
 # ─────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    missing = []
-    if not BOT_TOKEN:  missing.append("TELEGRAM_BOT_TOKEN")
-    if not ADMIN_ID:   missing.append("TELEGRAM_ADMIN_ID")
-    if not API_ID:     missing.append("TELEGRAM_API_ID")
-    if not API_HASH:   missing.append("TELEGRAM_API_HASH")
-    if missing:
-        print(f"❌ Missing env vars: {', '.join(missing)}")
+    if not BOT_TOKEN:
+        print("❌ Missing: TELEGRAM_BOT_TOKEN")
         sys.exit(1)
 
     app   = Application.builder().token(BOT_TOKEN).build()
